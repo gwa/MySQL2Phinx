@@ -26,12 +26,10 @@ Not all phinx functionality is covered! **Check your migration code before use!*
 
 Currently **not supported**:
 
-* [] Foreign keys
+* [ ] Foreign keys
 * Columns:
-  * [] `text`
-  * [] `biginteger`
-  * [] `float`
-  * [] `decimal`
-  * [] `time`
-  * [] `binary`
-  * [] `boolean`
+  * [ ] `float`
+  * [ ] `decimal`
+  * [ ] `time`
+  * [ ] `binary`
+  * [ ] `boolean`
