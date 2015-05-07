@@ -5,7 +5,7 @@ A simple cli php script to generate a [phinx](https://github.com/robmorgan/phinx
 ## Usage
 
 ```
-$ php -f mysql2phinx [database] [user] [password] > migration.php
+$ php -f mysql2phinx.php [database] [user] [password] > migration.php
 ```
 
 Copy migration commands to your migration file.
@@ -27,7 +27,7 @@ Not all phinx functionality is covered! **Check your migration code before use!*
 Currently **not supported**:
 
 * [ ] Foreign keys
-* Columns:
+* Column types:
   * [ ] `float`
   * [ ] `decimal`
   * [ ] `time`
