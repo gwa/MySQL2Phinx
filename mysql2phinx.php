@@ -26,11 +26,11 @@ $config = array(
     'port'    => $argc === 6 ? $argv[5] : '3306'
 );
 
-function createMigration($mysqli)
+function createMigration($mysqli, $indent = 2)
 {
     $output = array();
     foreach (getTables($mysqli) as $table) {
-        $output[] = getTableMigration($table, $mysqli);
+        $output[] = getTableMigration($table, $mysqli, $indent);
     }
     return implode(PHP_EOL, $output) . PHP_EOL ;
 }
@@ -46,36 +46,73 @@ function getTables($mysqli)
     return array_map(function($a) { return $a[0]; }, $res->fetch_all());
 }
 
-function getTableMigration($table, $mysqli)
+function getTableMigration($table, $mysqli, $indent)
 {
+    $ind = getIndentation($indent);
+
     $output = array();
-    $output[] = '// Migration for table ' . $table;
-    $output[] = '$table = $this->table(\'' . $table . '\');';
-    $output[] = '$table';
+    $output[] = $ind . '// Migration for table ' . $table;
+    $output[] = $ind . '$table = $this->table(\'' . $table . '\');';
+    $output[] = $ind . '$table';
 
     foreach (getColumns($table, $mysqli) as $column) {
         if ($column['Field'] !== 'id') {
-            $output[] = getColumnMigration($column['Field'], $column);
+            $output[] = getColumnMigration($column['Field'], $column, $indent + 1);
         }
     }
 
-    if ($indexes = getIndexMigrations(getIndexes($table, $mysqli))) {
+    if ($indexes = getIndexMigrations(getIndexes($table, $mysqli), $indent + 1)) {
         $output[] = $indexes;
     }
 
-    $output[] = '    ->create();';
+    $output[] = $ind . '    ->create();';
     $output[] = PHP_EOL;
 
     return implode(PHP_EOL, $output);
 }
 
-function getColumnMigration($column, $columndata)
+function getColumnMigration($column, $columndata, $indent)
 {
+    $ind = getIndentation($indent);
+
     $phinxtype = getPhinxColumnType($columndata);
     $columnattributes = getPhinxColumnAttibutes($phinxtype, $columndata);
-    $output = '    ->addColumn(\'' . $column . '\', \'' . $phinxtype . '\', ' . $columnattributes . ')';
+    $output = $ind . '->addColumn(\'' . $column . '\', \'' . $phinxtype . '\', ' . $columnattributes . ')';
     return $output;
 }
+
+function getIndexMigrations($indexes, $indent)
+{
+    $ind = getIndentation($indent);
+
+    $keyedindexes = array();
+    foreach($indexes as $index) {
+        if ($index['Column_name'] === 'id') {
+            continue;
+        }
+
+        $key = $index['Key_name'];
+        if (!isset($keyedindexes[$key])) {
+            $keyedindexes[$key] = array();
+            $keyedindexes[$key]['columns'] = array();
+            $keyedindexes[$key]['unique'] = $index['Non_unique'] !== '1';
+        }
+
+        $keyedindexes[$key]['columns'][] = $index['Column_name'];
+    }
+
+    $output = [];
+
+    foreach ($keyedindexes as $index) {
+        $columns = 'array(\'' . implode('\', \'', $index['columns']) . '\')';
+        $options = $index['unique'] ? 'array(\'unique\' => true)' : 'array()';
+        $output[] = $ind . '->addIndex(' . $columns . ', ' . $options . ')';
+    }
+
+    return implode(PHP_EOL, $output);
+}
+
+/* ---- */
 
 function getMySQLColumnType($columndata)
 {
@@ -195,35 +232,6 @@ function getPhinxColumnAttibutes($phinxtype, $columndata)
     return 'array(' . implode(', ', $attributes) . ')';
 }
 
-function getIndexMigrations($indexes)
-{
-    $keyedindexes = array();
-    foreach($indexes as $index) {
-        if ($index['Column_name'] === 'id') {
-            continue;
-        }
-
-        $key = $index['Key_name'];
-        if (!isset($keyedindexes[$key])) {
-            $keyedindexes[$key] = array();
-            $keyedindexes[$key]['columns'] = array();
-            $keyedindexes[$key]['unique'] = $index['Non_unique'] !== '1';
-        }
-
-        $keyedindexes[$key]['columns'][] = $index['Column_name'];
-    }
-
-    $output = [];
-
-    foreach ($keyedindexes as $index) {
-        $columns = 'array(\'' . implode('\', \'', $index['columns']) . '\')';
-        $options = $index['unique'] ? 'array(\'unique\' => true)' : 'array()';
-        $output[] = '    ->addIndex(' . $columns . ', ' . $options . ')';
-    }
-
-    return implode(PHP_EOL, $output);
-}
-
 function getColumns($table, $mysqli)
 {
     $res = $mysqli->query('SHOW COLUMNS FROM ' . $table);
@@ -236,6 +244,20 @@ function getIndexes($table, $mysqli)
     return $res->fetch_all(MYSQLI_ASSOC);
 }
 
+function getIndentation($level)
+{
+    return str_repeat('    ', $level);
+}
+
 echo '<?php' . PHP_EOL;
-echo '// Automatically created phinx migration commands for tables from database ' . $config['name'] . PHP_EOL . PHP_EOL ;
+echo 'use Phinx\Migration\AbstractMigration;' . PHP_EOL;
+echo 'use Phinx\Db\Adapter\MysqlAdapter;' . PHP_EOL . PHP_EOL;
+
+echo 'class InitialMigration extends AbstractMigration' . PHP_EOL;
+echo '{' . PHP_EOL;
+echo '    public function up()' . PHP_EOL;
+echo '    {' . PHP_EOL;
+echo '        // Automatically created phinx migration commands for tables from database ' . $config['name'] . PHP_EOL . PHP_EOL;
 echo createMigration(getMysqliConnection($config));
+echo '    }' . PHP_EOL;
+echo '}' . PHP_EOL;
