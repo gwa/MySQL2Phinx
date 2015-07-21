@@ -177,6 +177,11 @@ function getPhinxColumnAttibutes($phinxtype, $columndata)
         $attributes[] = '\'default\' => ' . $default;
     }
 
+    // on update CURRENT_TIMESTAMP
+    if ($columndata['Extra'] === 'on update CURRENT_TIMESTAMP') {
+        $attributes[] = '\'update\' => \'CURRENT_TIMESTAMP\'';
+    }
+
     // limit / length
     $limit = 0;
     switch (getMySQLColumnType($columndata)) {
