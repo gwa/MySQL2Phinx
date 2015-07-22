@@ -20,7 +20,6 @@ Not all phinx functionality is covered! **Check your migration code before use!*
 
 Currently **not supported**:
 
-* [ ] Foreign keys
 * Column types:
   * [ ] `float`
   * [ ] `decimal`
