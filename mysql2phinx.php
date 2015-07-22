@@ -22,7 +22,7 @@ $config = array(
     'name'    => $argv[1],
     'user'    => $argv[2],
     'pass'    => $argv[3],
-    'host'    => $argc === 5 ? $argv[6] : '127.0.0.1',
+    'host'    => $argc === 5 ? $argv[6] : 'localhost',
     'port'    => $argc === 6 ? $argv[5] : '3306'
 );
 
@@ -61,8 +61,8 @@ function getTableMigration($table, $mysqli, $indent)
         }
     }
 
-    if ($indexes = getIndexMigrations(getIndexes($table, $mysqli), $indent + 1)) {
-        $output[] = $indexes;
+    if ($foreign_keys = getForeignKeysMigrations(getForeignKeys($table, $mysqli), $indent + 1)) {
+        $output[] = $foreign_keys;
     }
 
     $output[] = $ind . '    ->create();';
@@ -109,6 +109,19 @@ function getIndexMigrations($indexes, $indent)
         $output[] = $ind . '->addIndex(' . $columns . ', ' . $options . ')';
     }
 
+    return implode(PHP_EOL, $output);
+}
+
+function getForeignKeysMigrations($foreign_keys, $indent)
+{
+    $ind = getIndentation($indent);
+    $output = [];
+    foreach ($foreign_keys as $foreign_key) {
+        $output[] = $ind . "->addForeignKey('" . $foreign_key['COLUMN_NAME'] . "', '" . $foreign_key['REFERENCED_TABLE_NAME'] . "', '" . $foreign_key['REFERENCED_COLUMN_NAME'] . "', array("
+            . "'delete' => '" . str_replace(' ', '_', $foreign_key['DELETE_RULE']) . "',"
+            . "'update' => '" . str_replace(' ', '_', $foreign_key['UPDATE_RULE']) . "'"
+        . "))";
+    }
     return implode(PHP_EOL, $output);
 }
 
@@ -177,6 +190,11 @@ function getPhinxColumnAttibutes($phinxtype, $columndata)
         $attributes[] = '\'default\' => ' . $default;
     }
 
+    // on update CURRENT_TIMESTAMP
+    if ($columndata['Extra'] === 'on update CURRENT_TIMESTAMP') {
+        $attributes[] = '\'update\' => \'CURRENT_TIMESTAMP\'';
+    }
+
     // limit / length
     $limit = 0;
     switch (getMySQLColumnType($columndata)) {
@@ -241,6 +259,37 @@ function getColumns($table, $mysqli)
 function getIndexes($table, $mysqli)
 {
     $res = $mysqli->query('SHOW INDEXES FROM ' . $table);
+    return $res->fetch_all(MYSQLI_ASSOC);
+}
+
+function getForeignKeys($table, $mysqli)
+{
+    $res = $mysqli->query("SELECT
+        cols.TABLE_NAME,
+        cols.COLUMN_NAME,
+        refs.REFERENCED_TABLE_NAME,
+        refs.REFERENCED_COLUMN_NAME,
+        cRefs.UPDATE_RULE,
+        cRefs.DELETE_RULE
+    FROM INFORMATION_SCHEMA.COLUMNS as cols
+    LEFT JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS refs
+        ON refs.TABLE_SCHEMA=cols.TABLE_SCHEMA
+        AND refs.REFERENCED_TABLE_SCHEMA=cols.TABLE_SCHEMA
+        AND refs.TABLE_NAME=cols.TABLE_NAME
+        AND refs.COLUMN_NAME=cols.COLUMN_NAME
+    LEFT JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS AS cons
+        ON cons.TABLE_SCHEMA=cols.TABLE_SCHEMA
+        AND cons.TABLE_NAME=cols.TABLE_NAME
+        AND cons.CONSTRAINT_NAME=refs.CONSTRAINT_NAME
+    LEFT JOIN INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS AS cRefs
+        ON cRefs.CONSTRAINT_SCHEMA=cols.TABLE_SCHEMA
+        AND cRefs.CONSTRAINT_NAME=refs.CONSTRAINT_NAME
+    WHERE
+        cols.TABLE_NAME = '" . $table . "'
+        AND cols.TABLE_SCHEMA = DATABASE()
+        AND refs.REFERENCED_TABLE_NAME IS NOT NULL
+        AND cons.CONSTRAINT_TYPE = 'FOREIGN KEY'
+    ;");
     return $res->fetch_all(MYSQLI_ASSOC);
 }
 
