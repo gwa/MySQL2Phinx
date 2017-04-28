@@ -37,7 +37,11 @@ function createMigration($mysqli, $indent = 2)
 
 function getMysqliConnection($config)
 {
-    return new mysqli($config['host'], $config['user'], $config['pass'], $config['name']);
+    $v = new mysqli($config['host'], $config['user'], $config['pass'], $config['name']);
+    if ($v === false) {
+        throw new Exception('Could not connect');
+    }
+    return $v;
 }
 
 function getTables($mysqli)
@@ -252,7 +256,10 @@ function getPhinxColumnAttibutes($phinxtype, $columndata)
 
 function getColumns($table, $mysqli)
 {
-    $res = $mysqli->query('SHOW COLUMNS FROM ' . $table);
+    $res = $mysqli->query($query = 'SHOW COLUMNS FROM `' . $table . '`');
+    if ($res === false) {
+        throw new Exception("Failed: $query");
+    }
     return $res->fetch_all(MYSQLI_ASSOC);
 }
 
