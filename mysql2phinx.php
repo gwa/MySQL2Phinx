@@ -148,6 +148,7 @@ function getPhinxColumnType($columndata)
         case 'smallint':
         case 'int':
         case 'mediumint':
+        case 'bigint':
             return 'integer';
 
         case 'timestamp':
