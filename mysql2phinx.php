@@ -22,8 +22,8 @@ $config = array(
     'name'    => $argv[1],
     'user'    => $argv[2],
     'pass'    => $argv[3],
-    'host'    => $argc === 5 ? $argv[6] : 'localhost',
-    'port'    => $argc === 6 ? $argv[5] : '3306'
+    'host'    => $argc >= 5 ? $argv[4] : 'localhost',
+    'port'    => $argc >= 6 ? $argv[5] : '3306'
 );
 
 function createMigration($mysqli, $indent = 2)
@@ -148,6 +148,7 @@ function getPhinxColumnType($columndata)
         case 'smallint':
         case 'int':
         case 'mediumint':
+        case 'bigint':
             return 'integer';
 
         case 'timestamp':
@@ -159,6 +160,9 @@ function getPhinxColumnType($columndata)
         case 'datetime':
             return 'datetime';
 
+        case 'decimal':
+            return 'decimal';
+
         case 'enum':
             return 'enum';
 
@@ -167,6 +171,8 @@ function getPhinxColumnType($columndata)
 
         case 'text':
         case 'tinytext':
+        case 'mediumtext':
+        case 'longtext':
             return 'text';
 
         case 'varchar':
@@ -241,9 +247,17 @@ function getPhinxColumnAttibutes($phinxtype, $columndata)
     }
 
     // unsigned
-    $pattern = '/\(\d+\) unsigned$/';
+    $pattern = '/\(\d+(\s*,\s*\d+)?\) unsigned$/';
     if (1 === preg_match($pattern, $columndata['Type'], $match)) {
         $attributes[] = '\'signed\' => false';
+    }
+
+    // decimal values
+    if ($phinxtype === 'decimal'
+        && 1 === preg_match('/decimal\((\d+)\s*,\s*(\d+)\)/i', $columndata['Type'], $decimalMatch)
+    ) {
+        $attributes[] = '\'precision\' => ' . (int) $decimalMatch[1];
+        $attributes[] = '\'scale\' => ' . (int) $decimalMatch[2];
     }
 
     // enum values

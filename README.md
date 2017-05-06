@@ -22,7 +22,6 @@ Currently **not supported**:
 
 * Column types:
   * [ ] `float`
-  * [ ] `decimal`
   * [ ] `time`
   * [ ] `binary`
   * [ ] `boolean`
