@@ -160,6 +160,9 @@ function getPhinxColumnType($columndata)
         case 'datetime':
             return 'datetime';
 
+        case 'decimal':
+            return 'decimal';
+
         case 'enum':
             return 'enum';
 
@@ -242,9 +245,17 @@ function getPhinxColumnAttibutes($phinxtype, $columndata)
     }
 
     // unsigned
-    $pattern = '/\(\d+\) unsigned$/';
+    $pattern = '/\(\d+(\s*,\s*\d+)?\) unsigned$/';
     if (1 === preg_match($pattern, $columndata['Type'], $match)) {
         $attributes[] = '\'signed\' => false';
+    }
+
+    // decimal values
+    if ($phinxtype === 'decimal'
+        && 1 === preg_match('/decimal\((\d+)\s*,\s*(\d+)\)/i', $columndata['Type'], $decimalMatch)
+    ) {
+        $attributes[] = '\'precision\' => ' . (int) $decimalMatch[1];
+        $attributes[] = '\'scale\' => ' . (int) $decimalMatch[2];
     }
 
     // enum values
