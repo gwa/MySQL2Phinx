@@ -171,6 +171,8 @@ function getPhinxColumnType($columndata)
 
         case 'text':
         case 'tinytext':
+        case 'mediumtext':
+        case 'longtext':
             return 'text';
 
         case 'varchar':
