@@ -4,7 +4,7 @@
  *
  * Commandline usage:
  * ```
- * $ php -f mysql2phinx [database] [user] [password] > migration.php
+ * $ php -f mysql2phinx.php [database] [user] [password] [host=localhost] [port=3306] > 20170507142126_initial_migration.php
  * ```
  */
 
@@ -13,75 +13,117 @@ if ($argc < 4) {
     echo 'Phinx MySQL migration generator' . PHP_EOL;
     echo '===============================' . PHP_EOL;
     echo 'Usage:' . PHP_EOL;
-    echo 'php -f ' . $argv[0] . ' [database] [user] [password] > migration.php';
+    echo "php -f {$argv[0]} [database] [user] [password] [host=localhost] [port=3306] > " . date('YmdHis') . "_initial_migration.php";
     echo PHP_EOL;
     exit;
 }
 
-$config = array(
-    'name'    => $argv[1],
-    'user'    => $argv[2],
-    'pass'    => $argv[3],
-    'host'    => $argc >= 5 ? $argv[4] : 'localhost',
-    'port'    => $argc >= 6 ? $argv[5] : '3306'
-);
+function getMysqliConnection($config)
+{
+    return new mysqli(
+        $config['host'],
+        $config['user'],
+        $config['pass'],
+        $config['name'],
+        $config['port']
+    );
+}
 
 function createMigration($mysqli, $indent = 2)
 {
-    $output = array();
-    foreach (getTables($mysqli) as $table) {
+    $tables = getTables($mysqli);
+
+    $output = [];
+    $output[] = '    public function up()';
+    $output[] = '    {';
+    $output[] = '        // Making sure no foreign key constraints stops the creation';
+    $output[] = '        $this->execute(\'SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0;\');';
+    $output[] = '';
+    foreach ($tables as $table) {
         $output[] = getTableMigration($table, $mysqli, $indent);
     }
-    return implode(PHP_EOL, $output) . PHP_EOL ;
-}
-
-function getMysqliConnection($config)
-{
-    $v = new mysqli($config['host'], $config['user'], $config['pass'], $config['name']);
-    if ($v === false) {
-        throw new Exception('Could not connect');
+    $output[] = '        // Resetting the default foreign key check';
+    $output[] = '        $this->execute(\'SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS;\');';
+    $output[] = '    }';
+    $output[] = '';
+    $output[] = '    public function down()';
+    $output[] = '    {';
+    $output[] = '        // Making sure no foreign key constraints stops the creation';
+    $output[] = '        $this->execute(\'SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0;\');';
+    $output[] = '';
+    foreach ($tables as $table) {
+        $output[] = getTableReversion($table, $mysqli, $indent);
     }
-    return $v;
+    $output[] = '        // Resetting the default foreign key check';
+    $output[] = '        $this->execute(\'SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS;\');';
+    $output[] = '    }';
+
+    return implode(PHP_EOL, $output) . PHP_EOL ;
 }
 
 function getTables($mysqli)
 {
-    $res = $mysqli->query('SHOW TABLES');
-    return array_map(function($a) { return $a[0]; }, $res->fetch_all());
+    $tables = $mysqli->query('SHOW TABLES')->fetch_all();
+    return array_column($tables, 0);
 }
 
 function getTableMigration($table, $mysqli, $indent)
 {
     $ind = getIndentation($indent);
 
-    $output = array();
-    $output[] = $ind . '// Migration for table ' . $table;
-    $output[] = $ind . '$table = $this->table(\'' . $table . '\');';
-    $output[] = $ind . '$table';
+    $primaryColumns = [];
 
-    foreach (getColumns($table, $mysqli) as $column) {
-        if ($column['Field'] !== 'id') {
-            $output[] = getColumnMigration($column['Field'], $column, $indent + 1);
+    $columns = getColumns($table, $mysqli);
+    foreach ($columns as $column) {
+        if ($column['Key'] == 'PRI') {
+            $primaryColumns[] = $column['Field'];
         }
     }
 
-    if ($foreign_keys = getForeignKeysMigrations(getForeignKeys($table, $mysqli), $indent + 1)) {
-        $output[] = $foreign_keys;
+    $output = [];
+    $output[] = "{$ind}// Migration for table {$table}";
+    $output[] = "{$ind}\$table = \$this->table('{$table}', "
+        . "['id' => false, 'primary_key' => " . (empty($primaryColumns) ? 'false' : "['" . implode("', '", $primaryColumns) . "']") . "]);";
+    $output[] = $ind . '$table';
+
+    foreach ($columns as $column) {
+        $output[] = getColumnMigration($column, $indent + 1);
     }
 
-    $output[] = $ind . '    ->create();';
-    $output[] = PHP_EOL;
+    if ($tableIndexes = getIndexMigrations(getIndexes($table, $mysqli), $indent + 1)) {
+        $output[] = $tableIndexes;
+    }
+
+    if ($foreignKeys = getForeignKeysMigrations(getForeignKeys($table, $mysqli), $indent + 1)) {
+        $output[] = $foreignKeys;
+    }
+
+    $output[] = $ind . '    ->create()';
+    $output[] = $ind . ';';
+    $output[] = '';
 
     return implode(PHP_EOL, $output);
 }
 
-function getColumnMigration($column, $columndata, $indent)
+function getTableReversion($table, $mysqli, $indent)
+{
+    $ind = getIndentation($indent);
+
+    $output = [];
+    $output[] = "{$ind}// Reversion for table {$table}";
+    $output[] = "{$ind}\$this->dropTable('{$table}');";
+    $output[] = '';
+
+    return implode(PHP_EOL, $output);
+}
+
+function getColumnMigration($columndata, $indent)
 {
     $ind = getIndentation($indent);
 
     $phinxtype = getPhinxColumnType($columndata);
     $columnattributes = getPhinxColumnAttibutes($phinxtype, $columndata);
-    $output = $ind . '->addColumn(\'' . $column . '\', \'' . $phinxtype . '\', ' . $columnattributes . ')';
+    $output = "{$ind}->addColumn('{$columndata['Field']}', '{$phinxtype}', {$columnattributes})";
     return $output;
 }
 
@@ -89,16 +131,17 @@ function getIndexMigrations($indexes, $indent)
 {
     $ind = getIndentation($indent);
 
-    $keyedindexes = array();
+    $keyedindexes = [];
     foreach($indexes as $index) {
-        if ($index['Column_name'] === 'id') {
+        $key = $index['Key_name'];
+
+        if ($key == 'PRIMARY') {
             continue;
         }
 
-        $key = $index['Key_name'];
         if (!isset($keyedindexes[$key])) {
-            $keyedindexes[$key] = array();
-            $keyedindexes[$key]['columns'] = array();
+            $keyedindexes[$key] = [];
+            $keyedindexes[$key]['columns'] = [];
             $keyedindexes[$key]['unique'] = $index['Non_unique'] !== '1';
         }
 
@@ -107,35 +150,37 @@ function getIndexMigrations($indexes, $indent)
 
     $output = [];
 
-    foreach ($keyedindexes as $index) {
-        $columns = 'array(\'' . implode('\', \'', $index['columns']) . '\')';
-        $options = $index['unique'] ? 'array(\'unique\' => true)' : 'array()';
-        $output[] = $ind . '->addIndex(' . $columns . ', ' . $options . ')';
+    foreach ($keyedindexes as $indexName => $index) {
+        $columns = "['" . implode("', '", $index['columns']) . "']";
+        $options = "['name' => '{$indexName}'";
+        $options .= ($index['unique'] ? ", 'unique' => true" : '');
+        $options .= ']';
+        $output[] = "{$ind}->addIndex({$columns}, {$options})";
     }
 
     return implode(PHP_EOL, $output);
 }
 
-function getForeignKeysMigrations($foreign_keys, $indent)
+function getForeignKeysMigrations($foreignKeys, $indent)
 {
     $ind = getIndentation($indent);
+
     $output = [];
-    foreach ($foreign_keys as $foreign_key) {
-        $output[] = $ind . "->addForeignKey('" . $foreign_key['COLUMN_NAME'] . "', '" . $foreign_key['REFERENCED_TABLE_NAME'] . "', '" . $foreign_key['REFERENCED_COLUMN_NAME'] . "', array("
-            . "'delete' => '" . str_replace(' ', '_', $foreign_key['DELETE_RULE']) . "',"
-            . "'update' => '" . str_replace(' ', '_', $foreign_key['UPDATE_RULE']) . "'"
-        . "))";
+
+    foreach ($foreignKeys as $foreignKey) {
+        $output[] = $ind . "->addForeignKey('{$foreignKey['COLUMN_NAME']}', '{$foreignKey['REFERENCED_TABLE_NAME']}', '{$foreignKey['REFERENCED_COLUMN_NAME']}', ["
+            . "'constraint' => '{$foreignKey['CONSTRAINT_NAME']}',"
+            . "'delete' => '" . str_replace(' ', '_', $foreignKey['DELETE_RULE']) . "',"
+            . "'update' => '" . str_replace(' ', '_', $foreignKey['UPDATE_RULE']) . "'"
+        . "])";
     }
+
     return implode(PHP_EOL, $output);
 }
-
-/* ---- */
 
 function getMySQLColumnType($columndata)
 {
-    $type = $columndata['Type'];
-    $pattern = '/^[a-z]+/';
-    preg_match($pattern, $type, $match);
+    preg_match('/^[a-z]+/', $columndata['Type'], $match);
     return $match[0];
 }
 
@@ -179,30 +224,31 @@ function getPhinxColumnType($columndata)
             return 'string';
 
         default:
-            return '[' . $type . ']';
+            return "[unsupported_{$type}]";
     }
 }
 
 function getPhinxColumnAttibutes($phinxtype, $columndata)
 {
-    $attributes = array();
-
-    // var_dump($columndata);
+    $attributes = [];
 
     // has NULL
     if ($columndata['Null'] === 'YES') {
-        $attributes[] = '\'null\' => true';
+        $attributes[] = "'null' => true";
     }
 
     // default value
     if ($columndata['Default'] !== null) {
-        $default = is_int($columndata['Default']) ? $columndata['Default'] : '\'' . $columndata['Default'] . '\'';
-        $attributes[] = '\'default\' => ' . $default;
+        $default = (is_int($columndata['Default'])
+            ? $columndata['Default']
+            : "'{$columndata['Default']}'"
+        );
+        $attributes[] = "'default' => {$default}";
     }
 
     // on update CURRENT_TIMESTAMP
     if ($columndata['Extra'] === 'on update CURRENT_TIMESTAMP') {
-        $attributes[] = '\'update\' => \'CURRENT_TIMESTAMP\'';
+        $attributes[] = "'update' => 'CURRENT_TIMESTAMP'";
     }
 
     // limit / length
@@ -243,75 +289,73 @@ function getPhinxColumnAttibutes($phinxtype, $columndata)
             }
     }
     if ($limit) {
-        $attributes[] = '\'limit\' => ' . $limit;
+        $attributes[] = "'limit' => {$limit}";
     }
 
     // unsigned
     $pattern = '/\(\d+(\s*,\s*\d+)?\) unsigned$/';
     if (1 === preg_match($pattern, $columndata['Type'], $match)) {
-        $attributes[] = '\'signed\' => false';
+        $attributes[] = "'signed' => false";
     }
 
     // decimal values
     if ($phinxtype === 'decimal'
         && 1 === preg_match('/decimal\((\d+)\s*,\s*(\d+)\)/i', $columndata['Type'], $decimalMatch)
     ) {
-        $attributes[] = '\'precision\' => ' . (int) $decimalMatch[1];
-        $attributes[] = '\'scale\' => ' . (int) $decimalMatch[2];
+        $attributes[] = "'precision' => " . (int) $decimalMatch[1];
+        $attributes[] = "'scale' => " . (int) $decimalMatch[2];
     }
 
     // enum values
     if ($phinxtype === 'enum') {
-        $attributes[] = '\'values\' => ' . str_replace('enum', 'array', $columndata['Type']);
+        $enumStr = preg_replace('/^enum\((.*)\)$/', '[$1]', $columndata['Type']);
+        $attributes[] = "'values' => {$enumStr}";
     }
 
-    return 'array(' . implode(', ', $attributes) . ')';
+    return '[' . implode(', ', $attributes) . ']';
 }
 
 function getColumns($table, $mysqli)
 {
-    $res = $mysqli->query($query = 'SHOW COLUMNS FROM `' . $table . '`');
-    if ($res === false) {
-        throw new Exception("Failed: $query");
-    }
-    return $res->fetch_all(MYSQLI_ASSOC);
+    return $mysqli->query("SHOW COLUMNS FROM `{$table}`")->fetch_all(MYSQLI_ASSOC);
 }
 
 function getIndexes($table, $mysqli)
 {
-    $res = $mysqli->query('SHOW INDEXES FROM ' . $table);
-    return $res->fetch_all(MYSQLI_ASSOC);
+    return $mysqli->query("SHOW INDEXES FROM `{$table}`")->fetch_all(MYSQLI_ASSOC);
 }
 
 function getForeignKeys($table, $mysqli)
 {
-    $res = $mysqli->query("SELECT
-        cols.TABLE_NAME,
-        cols.COLUMN_NAME,
-        refs.REFERENCED_TABLE_NAME,
-        refs.REFERENCED_COLUMN_NAME,
-        cRefs.UPDATE_RULE,
-        cRefs.DELETE_RULE
-    FROM INFORMATION_SCHEMA.COLUMNS as cols
-    LEFT JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS refs
-        ON refs.TABLE_SCHEMA=cols.TABLE_SCHEMA
-        AND refs.REFERENCED_TABLE_SCHEMA=cols.TABLE_SCHEMA
-        AND refs.TABLE_NAME=cols.TABLE_NAME
-        AND refs.COLUMN_NAME=cols.COLUMN_NAME
-    LEFT JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS AS cons
-        ON cons.TABLE_SCHEMA=cols.TABLE_SCHEMA
-        AND cons.TABLE_NAME=cols.TABLE_NAME
-        AND cons.CONSTRAINT_NAME=refs.CONSTRAINT_NAME
-    LEFT JOIN INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS AS cRefs
-        ON cRefs.CONSTRAINT_SCHEMA=cols.TABLE_SCHEMA
-        AND cRefs.CONSTRAINT_NAME=refs.CONSTRAINT_NAME
-    WHERE
-        cols.TABLE_NAME = '" . $table . "'
-        AND cols.TABLE_SCHEMA = DATABASE()
-        AND refs.REFERENCED_TABLE_NAME IS NOT NULL
-        AND cons.CONSTRAINT_TYPE = 'FOREIGN KEY'
-    ;");
-    return $res->fetch_all(MYSQLI_ASSOC);
+    return $mysqli->query(
+        "SELECT
+            cols.TABLE_NAME,
+            cols.COLUMN_NAME,
+            refs.CONSTRAINT_NAME,
+            refs.REFERENCED_TABLE_NAME,
+            refs.REFERENCED_COLUMN_NAME,
+            cRefs.UPDATE_RULE,
+            cRefs.DELETE_RULE
+        FROM INFORMATION_SCHEMA.COLUMNS as cols
+        LEFT JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS refs
+            ON refs.TABLE_SCHEMA=cols.TABLE_SCHEMA
+            AND refs.REFERENCED_TABLE_SCHEMA=cols.TABLE_SCHEMA
+            AND refs.TABLE_NAME=cols.TABLE_NAME
+            AND refs.COLUMN_NAME=cols.COLUMN_NAME
+        LEFT JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS AS cons
+            ON cons.TABLE_SCHEMA=cols.TABLE_SCHEMA
+            AND cons.TABLE_NAME=cols.TABLE_NAME
+            AND cons.CONSTRAINT_NAME=refs.CONSTRAINT_NAME
+        LEFT JOIN INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS AS cRefs
+            ON cRefs.CONSTRAINT_SCHEMA=cols.TABLE_SCHEMA
+            AND cRefs.CONSTRAINT_NAME=refs.CONSTRAINT_NAME
+        WHERE
+            cols.TABLE_NAME = '{$table}'
+            AND cols.TABLE_SCHEMA = DATABASE()
+            AND refs.REFERENCED_TABLE_NAME IS NOT NULL
+            AND cons.CONSTRAINT_TYPE = 'FOREIGN KEY'
+        ;"
+    )->fetch_all(MYSQLI_ASSOC);
 }
 
 function getIndentation($level)
@@ -319,15 +363,23 @@ function getIndentation($level)
     return str_repeat('    ', $level);
 }
 
+$connection = getMysqliConnection([
+    'name' => $argv[1],
+    'user' => $argv[2],
+    'pass' => $argv[3],
+    'host' => ($argc >= 5 ? $argv[4] : 'localhost'),
+    'port' => ($argc >= 6 ? $argv[5] : '3306'),
+]);
+if (!$connection) {
+    echo 'Connection to database failed.';
+    exit;
+}
+
 echo '<?php' . PHP_EOL;
 echo 'use Phinx\Migration\AbstractMigration;' . PHP_EOL;
-echo 'use Phinx\Db\Adapter\MysqlAdapter;' . PHP_EOL . PHP_EOL;
-
+echo 'use Phinx\Db\Adapter\MysqlAdapter;' . PHP_EOL;
+echo PHP_EOL;
 echo 'class InitialMigration extends AbstractMigration' . PHP_EOL;
 echo '{' . PHP_EOL;
-echo '    public function up()' . PHP_EOL;
-echo '    {' . PHP_EOL;
-echo '        // Automatically created phinx migration commands for tables from database ' . $config['name'] . PHP_EOL . PHP_EOL;
-echo createMigration(getMysqliConnection($config));
-echo '    }' . PHP_EOL;
+echo createMigration($connection);
 echo '}' . PHP_EOL;
