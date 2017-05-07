@@ -165,10 +165,31 @@ function getForeignKeysMigrations($foreignKeys, $indent)
 {
     $ind = getIndentation($indent);
 
-    $output = [];
+    $groupedForeignKeys = [];
 
     foreach ($foreignKeys as $foreignKey) {
-        $output[] = $ind . "->addForeignKey('{$foreignKey['COLUMN_NAME']}', '{$foreignKey['REFERENCED_TABLE_NAME']}', '{$foreignKey['REFERENCED_COLUMN_NAME']}', ["
+        if (!isset($groupedForeignKeys[$foreignKey['CONSTRAINT_NAME']])) {
+            $groupedForeignKeys[$foreignKey['CONSTRAINT_NAME']] = [
+                'CONSTRAINT_NAME' => $foreignKey['CONSTRAINT_NAME'],
+                'REFERENCED_TABLE_NAME' => $foreignKey['REFERENCED_TABLE_NAME'],
+                'DELETE_RULE' => $foreignKey['DELETE_RULE'],
+                'UPDATE_RULE' => $foreignKey['UPDATE_RULE'],
+                'COLUMN_NAMES' => [],
+                'REFERENCED_COLUMN_NAMES' => [],
+            ];
+        }
+        $groupedForeignKeys[$foreignKey['CONSTRAINT_NAME']]['COLUMN_NAMES'][] = $foreignKey['COLUMN_NAME'];
+        $groupedForeignKeys[$foreignKey['CONSTRAINT_NAME']]['REFERENCED_COLUMN_NAMES'][] = $foreignKey['REFERENCED_COLUMN_NAME'];
+    }
+
+    $output = [];
+
+    foreach ($groupedForeignKeys as $foreignKey) {
+        $output[] = "{$ind}->addForeignKey("
+            . "['" . implode("', '", $foreignKey['COLUMN_NAMES']) . "'], "
+            . "'{$foreignKey['REFERENCED_TABLE_NAME']}', "
+            . "['" . implode("', '", $foreignKey['REFERENCED_COLUMN_NAMES']) . "'], "
+            . "["
             . "'constraint' => '{$foreignKey['CONSTRAINT_NAME']}',"
             . "'delete' => '" . str_replace(' ', '_', $foreignKey['DELETE_RULE']) . "',"
             . "'update' => '" . str_replace(' ', '_', $foreignKey['UPDATE_RULE']) . "'"
