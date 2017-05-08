@@ -272,6 +272,11 @@ function getPhinxColumnAttibutes($phinxtype, $columndata)
         $attributes[] = "'update' => 'CURRENT_TIMESTAMP'";
     }
 
+    // auto_increment
+    if ($columndata['Extra'] === 'auto_increment') {
+        $attributes[] = "'identity' => true";
+    }
+
     // limit / length
     $limit = 0;
     switch (getMySQLColumnType($columndata)) {
