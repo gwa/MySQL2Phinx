@@ -80,10 +80,16 @@ function getTableMigration($table, $mysqli, $indent)
         }
     }
 
+    $tableInformation = getTableInformation($table, $mysqli);
+
     $output = [];
     $output[] = "{$ind}// Migration for table {$table}";
     $output[] = "{$ind}\$table = \$this->table('{$table}', "
-        . "['id' => false, 'primary_key' => " . (empty($primaryColumns) ? 'false' : "['" . implode("', '", $primaryColumns) . "']") . "]);";
+        . "['id' => false"
+        . ", 'primary_key' => " . (empty($primaryColumns) ? 'false' : "['" . implode("', '", $primaryColumns) . "', ]")
+        . ", 'engine' => '{$tableInformation['Engine']}'"
+        . ", 'collation' => '{$tableInformation['Collation']}'"
+        . "]);";
     $output[] = $ind . '$table';
 
     foreach ($columns as $column) {
@@ -349,6 +355,11 @@ function getColumns($table, $mysqli)
 function getIndexes($table, $mysqli)
 {
     return $mysqli->query("SHOW INDEXES FROM `{$table}`")->fetch_all(MYSQLI_ASSOC);
+}
+
+function getTableInformation($table, $mysqli)
+{
+    return $mysqli->query("SHOW TABLE STATUS WHERE Name = '{$table}'")->fetch_array(MYSQLI_ASSOC);
 }
 
 function getForeignKeys($table, $mysqli)
