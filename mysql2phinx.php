@@ -94,7 +94,7 @@ function getTableMigration($table, $mysqli, $indent)
     $output[] = $ind . '$table';
 
     foreach ($columns as $column) {
-        $output[] = getColumnMigration($column, $indent + 1);
+        $output[] = getColumnMigration($column, $indent + 1, $tableInformation);
     }
 
     if ($tableIndexes = getIndexMigrations(getIndexes($table, $mysqli), $indent + 1)) {
@@ -124,12 +124,12 @@ function getTableReversion($table, $mysqli, $indent)
     return implode(PHP_EOL, $output);
 }
 
-function getColumnMigration($columndata, $indent)
+function getColumnMigration($columndata, $indent, $tableInformation)
 {
     $ind = getIndentation($indent);
 
     $phinxtype = getPhinxColumnType($columndata);
-    $columnattributes = getPhinxColumnAttibutes($phinxtype, $columndata);
+    $columnattributes = getPhinxColumnAttibutes($phinxtype, $columndata, $tableInformation);
     $output = "{$ind}->addColumn('{$columndata['Field']}', '{$phinxtype}', {$columnattributes})";
     return $output;
 }
@@ -261,7 +261,7 @@ function getPhinxColumnType($columndata)
     }
 }
 
-function getPhinxColumnAttibutes($phinxtype, $columndata)
+function getPhinxColumnAttibutes($phinxtype, $columndata, $tableInformation)
 {
     $attributes = [];
 
