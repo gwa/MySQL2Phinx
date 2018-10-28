@@ -90,6 +90,9 @@ function getTableMigration($table, $mysqli, $indent)
         . ", 'engine' => '{$tableInformation['Engine']}'"
         . ", 'collation' => '{$tableInformation['Collation']}'"
         . (!empty($tableInformation['Comment'])?", 'comment' => '".addcslashes($tableInformation['Comment'], "'\\")."'":'')
+        . (!empty($tableInformation['Create_options'])&&preg_match('/row_format=([^ ]+)/', $tableInformation['Create_options'], $rowFormatMatches)?(
+            ", 'row_format' => '".$rowFormatMatches[1]."'"
+        ):'')
         . "]);";
     $output[] = $ind . '$table';
 
