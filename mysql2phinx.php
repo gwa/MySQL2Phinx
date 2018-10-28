@@ -349,12 +349,17 @@ function getPhinxColumnAttibutes($phinxtype, $columndata)
         $attributes[] = "'values' => {$enumStr}";
     }
 
+    // column comments
+    if (!empty($columndata['Comment'])) {
+        $attributes[] = "'comment' => '".addcslashes($columndata['Comment'], "'\\")."'";
+    }
+
     return '[' . implode(', ', $attributes) . ']';
 }
 
 function getColumns($table, $mysqli)
 {
-    return $mysqli->query("SHOW COLUMNS FROM `{$table}`")->fetch_all(MYSQLI_ASSOC);
+    return $mysqli->query("SHOW FULL COLUMNS FROM `{$table}`")->fetch_all(MYSQLI_ASSOC);
 }
 
 function getIndexes($table, $mysqli)
