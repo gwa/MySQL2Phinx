@@ -89,6 +89,7 @@ function getTableMigration($table, $mysqli, $indent)
         . ", 'primary_key' => " . (empty($primaryColumns) ? 'null' : "['" . implode("', '", $primaryColumns) . "']")
         . ", 'engine' => '{$tableInformation['Engine']}'"
         . ", 'collation' => '{$tableInformation['Collation']}'"
+        . (!empty($tableInformation['Comment'])?", 'comment' => '".addcslashes($tableInformation['Comment'], "'\\")."'":'')
         . "]);";
     $output[] = $ind . '$table';
 
