@@ -149,6 +149,7 @@ function getIndexMigrations($indexes, $indent)
             $keyedindexes[$key] = [];
             $keyedindexes[$key]['columns'] = [];
             $keyedindexes[$key]['unique'] = $index['Non_unique'] !== '1';
+            $keyedindexes[$key]['fulltext'] = $index['Index_type'] == 'FULLTEXT';
         }
 
         $keyedindexes[$key]['columns'][] = $index['Column_name'];
@@ -160,6 +161,7 @@ function getIndexMigrations($indexes, $indent)
         $columns = "['" . implode("', '", $index['columns']) . "']";
         $options = "['name' => '{$indexName}'";
         $options .= ($index['unique'] ? ", 'unique' => true" : '');
+        $options .= ($index['fulltext'] ? ", 'type' => 'fulltext'" : '');
         $options .= ']';
         $output[] = "{$ind}->addIndex({$columns}, {$options})";
     }
