@@ -86,7 +86,7 @@ function getTableMigration($table, $mysqli, $indent)
     $output[] = "{$ind}// Migration for table {$table}";
     $output[] = "{$ind}\$table = \$this->table('{$table}', "
         . "['id' => false"
-        . ", 'primary_key' => " . (empty($primaryColumns) ? 'false' : "['" . implode("', '", $primaryColumns) . "']")
+        . ", 'primary_key' => " . (empty($primaryColumns) ? 'null' : "['" . implode("', '", $primaryColumns) . "']")
         . ", 'engine' => '{$tableInformation['Engine']}'"
         . ", 'collation' => '{$tableInformation['Collation']}'"
         . "]);";
