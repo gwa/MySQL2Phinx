@@ -325,8 +325,11 @@ function getPhinxColumnAttibutes($phinxtype, $columndata, $tableInformation)
 
         default:
             $pattern = '/\((\d+)\)$/';
+            $pattern_alt = '/\((\d+)\) (un|)signed$/';
             if (1 === preg_match($pattern, $columndata['Type'], $match)) {
                 $limit = $match[1];
+            }else if (1 === preg_match($pattern_alt, $columndata['Type'], $match_alt)) {
+                $limit = $match_alt[1];
             }
     }
     if ($limit) {
