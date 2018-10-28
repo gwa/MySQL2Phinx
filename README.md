@@ -25,3 +25,4 @@ Currently **not supported**:
   * [ ] `time`
   * [ ] `binary`
   * [ ] `boolean`
+  * [ ] `double`
