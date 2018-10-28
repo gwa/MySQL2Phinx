@@ -241,6 +241,9 @@ function getPhinxColumnType($columndata)
         case 'char':
             return 'char';
 
+        case 'blob':
+            return 'blob';
+
         case 'text':
         case 'tinytext':
         case 'mediumtext':
