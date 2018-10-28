@@ -355,6 +355,11 @@ function getPhinxColumnAttibutes($phinxtype, $columndata, $tableInformation)
         $attributes[] = "'comment' => '".addcslashes($columndata['Comment'], "'\\")."'";
     }
 
+    // column collation
+    if (!empty($columndata['Collation']) && $columndata['Collation']!=$tableInformation['Collation']) {
+        $attributes[] = "'collation' => '".$columndata['Collation']."'";
+    }
+
     return '[' . implode(', ', $attributes) . ']';
 }
 
