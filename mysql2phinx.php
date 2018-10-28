@@ -63,8 +63,20 @@ function createMigration($mysqli, $indent = 2)
 
 function getTables($mysqli)
 {
-    $tables = $mysqli->query('SHOW TABLES')->fetch_all();
-    return array_column($tables, 0);
+    $res = $mysqli->query('SHOW TABLES');
+    $blacklist = array(
+        'phinxlog',
+    );
+    $buff = array_map(function ($a) {
+        return $a[0];
+    }, $res->fetch_all());
+    $newbuff = array();
+    foreach ($buff as $k => $t) {
+        if (in_array($t, $blacklist))
+            continue;
+        $newbuff[] = $t;
+    }
+    return $newbuff;
 }
 
 function getTableMigration($table, $mysqli, $indent)
